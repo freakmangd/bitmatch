@@ -1,47 +1,26 @@
 const std = @import("std");
 
-fn bitmatch_(comptime fmt_: []const u8, byte: u8) ?Bitmatch(fmt_) {
+pub fn bitmatch(comptime fmt_: []const u8, byte: u8) ?Bitmatch(fmt_) {
     const fmt = comptime normalizeFmt(fmt_);
     const idents = comptime bitmatchIdentifiers(fmt);
-    var vals: [idents.len]u8 = .{0} ** idents.len;
 
-    var shift: u3 = 7;
-    while (true) : (shift -= 1) {
-        const char = fmt[7 - shift];
+    var out: Bitmatch(fmt) = undefined;
 
-        switch (char) {
+    comptime var ident_i: usize = 0;
+    comptime var shift: u3 = 7;
+    inline while (true) : (shift -= 1) {
+        switch (fmt[7 - shift]) {
             '1' => if ((byte >> shift) & 1 == 0) return null,
             '0' => if ((byte >> shift) & 1 == 1) return null,
             '?' => continue,
-            else => {
-                // a character that isnt an identifier and isnt in fmt
-                // is caught at comptime
-                const ident, const ident_i = for (idents, 0..) |id, j| {
-                    if (id.name == char) break .{ id, j };
-                } else unreachable;
-
-                shift -= @intCast(ident.len - 1);
-                vals[ident_i] = byte >> shift;
+            else => if (idents.len > 0) {
+                shift -= @intCast(idents[ident_i].len - 1);
+                @field(out, &.{idents[ident_i].name}) = (byte >> shift) & comptime mask(idents[ident_i].len);
+                ident_i += 1;
             },
         }
 
         if (shift == 0) break;
-    }
-
-    var out: Bitmatch(fmt) = undefined;
-    inline for (idents, 0..) |ident, j| {
-        @field(out, &.{ident.name}) = @truncate(vals[j]);
-    }
-
-    return out;
-}
-
-pub fn bitmatch(comptime fmt_: []const u8, byte: u8) ?Bitmatch(fmt_) {
-    const res: BitmatchPacked(fmt_) = bitmatchPacked(fmt_, byte) orelse return null;
-    var out: Bitmatch(fmt_) = undefined;
-
-    inline for (comptime std.meta.fieldNames(Bitmatch(fmt_))) |field_name| {
-        @field(out, field_name) = @truncate(@field(res, field_name));
     }
 
     return out;
@@ -51,11 +30,24 @@ test bitmatch {
     try testBitmatches(bitmatch);
 }
 
+fn mask(bit_count: u8) u8 {
+    var out: u8 = 0;
+    for (0..bit_count) |_| {
+        out <<= 1;
+        out |= 1;
+    }
+    return out;
+}
+
+test mask {
+    try std.testing.expectEqual(0b11, comptime mask(2));
+}
+
 pub fn bitmatchPacked(comptime fmt_: []const u8, byte: u8) ?BitmatchPacked(fmt_) {
     const fmt = comptime normalizeFmt(fmt_);
 
-    var shift: u3 = 7;
-    while (true) : (shift -= 1) {
+    comptime var shift: u3 = 7;
+    inline while (true) : (shift -= 1) {
         switch (fmt[7 - shift]) {
             '1' => if ((byte >> shift) & 1 == 0) return null,
             '0' => if ((byte >> shift) & 1 == 1) return null,
@@ -111,6 +103,7 @@ fn testBitmatches(comptime bitmatch_impl: anytype) !void {
 
     {
         if (bitmatch_impl("1", 0b0)) |_| return error.ExpectedNull;
+        if (bitmatch_impl("1b00_11c0", 0b0000_0000)) |_| return error.ExpectedNull;
     }
 }
 
@@ -177,7 +170,8 @@ fn Bitmatch(comptime fmt: []const u8) type {
     for (&fields, idents) |*f, ident| {
         f.* = .{
             .name = &[_:0]u8{ident.name},
-            .type = std.meta.Int(.unsigned, ident.len),
+            .type = u8,
+            //.type = std.meta.Int(.unsigned, ident.len),
             .alignment = 0,
             .is_comptime = false,
             .default_value = null,

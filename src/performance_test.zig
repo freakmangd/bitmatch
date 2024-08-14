@@ -2,7 +2,7 @@ const std = @import("std");
 const bm = @import("bitmatch");
 const keep = std.mem.doNotOptimizeAway;
 
-const runs = 100_000;
+const runs = 500_000;
 
 pub fn main() !void {
     var timer = try std.time.Timer.start();
@@ -20,7 +20,12 @@ pub fn main() !void {
 
 fn time(comptime impl: anytype) void {
     for (0..runs) |_| {
-        var res = impl("abcd_efgh", 0b1010_1010);
-        keep(&res);
+        var res = impl("abc0_1def", 0b1010_1010) orelse @panic("bad");
+        std.mem.doNotOptimizeAway(&res);
+        res.a = res.b +% res.c +% res.d -% res.e -% res.f;
+        res.b = res.c +% res.d +% res.e -% res.f -% res.a;
+        res.c = res.d +% res.e +% res.f -% res.a -% res.b;
+        res.d = res.e +% res.f +% res.a -% res.b -% res.c;
+        res.e = res.f +% res.a +% res.b -% res.c -% res.d;
     }
 }
