@@ -99,6 +99,7 @@ fn testBitmatches(comptime bitmatch_impl: anytype) !void {
 
     {
         _ = bitmatch_impl("1_1_0_0____1_0_0_1", 0b11001001) orelse return error.ExpectedNonNull;
+        _ = bitmatch_impl("????_0000", 0b1010_0000) orelse return error.ExpectedNonNull;
     }
 
     {
@@ -136,7 +137,7 @@ fn bitmatchIdentifiers(comptime fmt_: []const u8) []const BitmatchIdentifier {
     while (i < fmt.len) : (i += 1) {
         while (i < fmt.len) : (i += 1) switch (fmt[i]) {
             'a'...'z', 'A'...'Z' => break,
-            '0', '1' => continue,
+            '0', '1', '?' => continue,
             else => @compileError("Unexpected character in bitmatch: `" ++ [_]u8{fmt[i]} ++ "`"),
         };
         if (i >= fmt.len) break;
