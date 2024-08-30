@@ -102,7 +102,7 @@ These match strings function the same: `"aaaabbbb"`, `"aaaa_bbbb"` `"a_a____aa_b
 
 #### Wildcards
 The `?` character is used as a wildcard, matching either a 0 or 1 without capturing it.
-```rs
+```zig
 const match = bitmatch("???_aa_???", 0b010_01_101) orelse return error.ExpectedNonNull;
 try std.testing.expectEqual(0b01, match.a);
 ```
