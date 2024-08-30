@@ -1,18 +1,36 @@
 const std = @import("std");
 
-pub fn bitmatch(comptime fmt_: []const u8, byte: u8) ?Bitmatch(fmt_, .auto) {
-    return bitmatchInner(fmt_, byte, .auto);
+/// Match `byte` against `fmt`. The returned struct will either be null,
+/// meaning the 0s and 1s of `fmt` didnt match `byte`, or have each identifier
+/// inside `fmt` as a field of type `u8`.
+pub fn bitmatch(comptime fmt: []const u8, byte: u8) ?Bitmatch(fmt, .auto) {
+    return bitmatchInner(fmt, byte, .auto);
 }
 
 test bitmatch {
+    const match = bitmatch("aaaa_b010", 0b1000_1010) orelse return error.ExpectedNonNull;
+    try std.testing.expect(@TypeOf(match.a) == u8);
+    try std.testing.expect(@TypeOf(match.b) == u8);
+    try std.testing.expectEqual(0b0000_1000, match.a);
+    try std.testing.expectEqual(0b0000_0001, match.b);
+
     try testBitmatches(bitmatch);
 }
 
-pub fn bitmatchPacked(comptime fmt_: []const u8, byte: u8) ?Bitmatch(fmt_, .@"packed") {
-    return bitmatchInner(fmt_, byte, .@"packed");
+/// Match `byte` against `fmt`. The returned packed struct will either be null,
+/// meaning the 0s and 1s of `fmt` didnt match `byte`, or have each identifier
+/// inside `fmt` as a field with the smallest int type necessary to store it.
+pub fn bitmatchPacked(comptime fmt: []const u8, byte: u8) ?Bitmatch(fmt, .@"packed") {
+    return bitmatchInner(fmt, byte, .@"packed");
 }
 
 test bitmatchPacked {
+    const match = bitmatchPacked("aaaa_b010", 0b1000_1010) orelse return error.ExpectedNonNull;
+    try std.testing.expect(@TypeOf(match.a) == u4);
+    try std.testing.expect(@TypeOf(match.b) == u1);
+    try std.testing.expectEqual(0b1000, match.a);
+    try std.testing.expectEqual(0b1, match.b);
+
     try std.testing.expectEqual(8, @bitSizeOf(Bitmatch("abcd_efgh", .@"packed")));
     try testBitmatches(bitmatchPacked);
 }
@@ -160,6 +178,11 @@ fn Bitmatch(comptime fmt: []const u8, comptime layout: std.builtin.Type.Containe
 }
 
 fn testBitmatches(comptime bitmatch_impl: anytype) !void {
+    {
+        const match = bitmatch("0001_1010", 0b0001_1010) orelse return error.ExpectedNonNull;
+        try std.testing.expectEqual(0, @sizeOf(@TypeOf(match)));
+    }
+
     {
         const match = bitmatch_impl("00oo_aabb", 0b0011_1001) orelse return error.ExpectedNonNull;
         try std.testing.expectEqual(0b11, match.o);
