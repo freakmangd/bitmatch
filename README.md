@@ -46,7 +46,7 @@ try std.testing.expectEqual(0b1, match.b);
 
 // no identifiers
 const match = bitmatch("0001_1010", 0b0001_1010) orelse return error.ExpectedNonNull;
-try std.testing.expectEqual(0, @sizeOf(match));
+try std.testing.expectEqual(0, @sizeOf(@TypeOf(match)));
 ```
 
 #### Match bits
