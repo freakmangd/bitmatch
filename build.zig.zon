@@ -1,6 +1,7 @@
 .{
-    .name = "bitmatch",
+    .name = .bitmatch,
     .version = "0.0.0",
+    .fingerprint = 0xc5080c56cf49f2f0,
     .dependencies = .{},
     .paths = .{
         "build.zig",

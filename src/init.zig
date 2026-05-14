@@ -73,10 +73,12 @@ test mask {
 
 const BitmatchIdentifier = struct {
     name: u8,
-    groups: []const struct {
+    groups: []const Group,
+
+    const Group = struct {
         pos: u4,
         len: u4,
-    },
+    };
 };
 
 // remove underscores and left pad with '?' (wildcard) if under 8 characters
@@ -97,7 +99,9 @@ fn normalizeFmt(comptime fmt: []const u8) []const u8 {
 
 fn bitmatchIdentifiers(comptime fmt_: []const u8) []const BitmatchIdentifier {
     const fmt = normalizeFmt(fmt_);
-    var idents: std.BoundedArray(BitmatchIdentifier, 8) = .{};
+
+    var idents_buf: [8]BitmatchIdentifier = undefined;
+    var idents_len: usize = 0;
 
     var i: usize = 0;
     while (i < fmt.len) : (i += 1) {
@@ -115,17 +119,18 @@ fn bitmatchIdentifiers(comptime fmt_: []const u8) []const BitmatchIdentifier {
         while (i < fmt.len) : (i += 1)
             if (char != fmt[i]) break;
 
-        const ident: *BitmatchIdentifier = for (idents.slice()) |*ident| {
+        const ident: *BitmatchIdentifier = for (idents_buf[0..idents_len]) |*ident| {
             if (ident.name == char) break ident;
         } else ident: {
-            idents.append(.{
+            idents_buf[idents_len] = .{
                 .name = char,
                 .groups = &.{},
-            }) catch unreachable;
-            break :ident &idents.buffer[idents.len - 1];
+            };
+            defer idents_len += 1;
+            break :ident &idents_buf[idents_len];
         };
 
-        ident.groups = ident.groups ++ .{.{
+        ident.groups = ident.groups ++ [1]BitmatchIdentifier.Group{.{
             .pos = char_start,
             .len = i - char_start,
         }};
@@ -133,48 +138,27 @@ fn bitmatchIdentifiers(comptime fmt_: []const u8) []const BitmatchIdentifier {
         i -|= 1;
     }
 
-    return idents.constSlice();
+    return idents_buf[0..idents_len];
 }
 
 fn Bitmatch(comptime fmt: []const u8, comptime layout: std.builtin.Type.ContainerLayout) type {
     const idents = comptime bitmatchIdentifiers(fmt);
 
-    var fields: [idents.len]std.builtin.Type.StructField = undefined;
-    for (&fields, idents) |*f, ident| {
-        f.* = .{
-            .name = &[_:0]u8{ident.name},
-            .type = if (layout == .auto) u8 else std.meta.Int(.unsigned, size: {
-                var size: u8 = 0;
-                for (ident.groups) |group| size += group.len;
-                break :size size;
-            }),
-            .alignment = 0,
-            .is_comptime = false,
-            .default_value = &@as(u8, 0),
-        };
+    var total_size: usize = 0;
+    var field_names: [idents.len][]const u8 = undefined;
+    var field_types: [idents.len]type = undefined;
+
+    for (&field_names, &field_types, idents) |*name, *F, ident| {
+        name.* = &[_:0]u8{ident.name};
+        F.* = if (layout == .auto) u8 else @Int(.unsigned, size: {
+            var size: u8 = 0;
+            for (ident.groups) |group| size += group.len;
+            total_size += size;
+            break :size size;
+        });
     }
 
-    return @Type(.{ .Struct = std.builtin.Type.Struct{
-        .decls = &.{},
-        .layout = layout,
-        .fields = if (layout == .auto) &fields else fields: {
-            break :fields &(fields ++ .{.{
-                .name = "_",
-                .type = std.meta.Int(.unsigned, size: {
-                    var size: u8 = 0;
-                    for (idents) |ident| {
-                        for (ident.groups) |group| size += group.len;
-                    }
-                    break :size 8 - size;
-                }),
-                .alignment = 0,
-                .is_comptime = false,
-                .default_value = &@as(u8, 0),
-            }});
-        },
-        .is_tuple = false,
-        .backing_integer = if (layout == .auto) null else u8,
-    } });
+    return @Struct(layout, if (layout == .auto) null else @Int(.unsigned, total_size), &field_names, &field_types, &@splat(.{ .default_value_ptr = &@as(u8, 0) }));
 }
 
 fn testBitmatches(comptime bitmatch_impl: anytype) !void {
